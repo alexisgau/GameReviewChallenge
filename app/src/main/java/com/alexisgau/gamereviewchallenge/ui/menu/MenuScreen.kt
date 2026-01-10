@@ -2,15 +2,34 @@ package com.alexisgau.gamereviewchallenge.ui.menu
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.*
-import androidx.compose.material3.*
+import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.ThumbUp
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -18,19 +37,27 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.alexisgau.gamereviewchallenge.ui.theme.*
+import com.alexisgau.gamereviewchallenge.R
+import com.alexisgau.gamereviewchallenge.ui.theme.SteamBackground
+import com.alexisgau.gamereviewchallenge.ui.theme.SteamNegative
+import com.alexisgau.gamereviewchallenge.ui.theme.SteamNegativeAccent
+import com.alexisgau.gamereviewchallenge.ui.theme.SteamPositive
+import com.alexisgau.gamereviewchallenge.ui.theme.SteamTextPrimary
+import com.alexisgau.gamereviewchallenge.ui.theme.SteamTextSecondary
 
 // Data class para configurar cada botoncito del grid
 data class MenuModeItem(
     val title: String,
     val description: String,
-    val icon: ImageVector,
+    val icon: ImageVector? = null,
     val color: Color,
-    val onClick: () -> Unit
+    val onClick: () -> Unit,
+    val drawable: Int? = null
 )
 
 @Composable
@@ -42,14 +69,38 @@ fun MenuScreen(
     onPlayBadReviews: () -> Unit,
     onPlayGoodReviews: () -> Unit
 ) {
-    // Definimos los items del Grid aquí para mantener el código limpio
+    //  items del Grid
     val gridItems = listOf(
-        MenuModeItem("Hardcore", description = "Sin vidas" , Icons.Default.Warning, SteamNegative, onPlayHardcore),
-        MenuModeItem("Free Mode", description = "Vidas ilimitadas", Icons.Default.Add, SteamAction, onPlayFree),
-        MenuModeItem("Bad Reviews", description = "Solo malas reviews", Icons.Default.Refresh, SteamNegativeAccent, onPlayBadReviews),
-        MenuModeItem("Good Reviews", description = "Solo buenas reviews", Icons.Default.ThumbUp, SteamPositive, onPlayGoodReviews)
-        // Puedes agregar GENRE aquí en el futuro
+        MenuModeItem(
+            "Hardcore",
+            description = "Sin vidas",
+            drawable = R.drawable.skull_icon,
+            color = SteamNegative,
+            onClick = onPlayHardcore
+        ),
+        MenuModeItem(
+            "Free Mode",
+            description = "Vidas ilimitadas",
+            drawable = R.drawable.infinite_icon,
+            color = Color(0xFF85cbe1),
+            onClick = onPlayFree
+        ),
+        MenuModeItem(
+            "Bad Reviews",
+            description = "Solo malas reviews",
+            drawable = R.drawable.thumb_down_icon,
+            color = SteamNegativeAccent,
+            onClick = onPlayBadReviews
+        ),
+        MenuModeItem(
+            "Good Reviews",
+            description = "Solo buenas reviews",
+            Icons.Default.ThumbUp,
+            SteamPositive,
+            onPlayGoodReviews
+        )
     )
+
 
     Scaffold(
         containerColor = SteamBackground
@@ -63,9 +114,9 @@ fun MenuScreen(
 
             Spacer(modifier = Modifier.height(24.dp))
 
-            // 1. HEADER
+            //  HEADER
             Text(
-                text = "Ready to guess?",
+                text = "Listo para adivinar?",
                 style = MaterialTheme.typography.headlineMedium,
                 color = SteamTextPrimary,
                 fontWeight = FontWeight.Bold
@@ -73,15 +124,14 @@ fun MenuScreen(
 
             Spacer(modifier = Modifier.height(24.dp))
 
-            // 2. HERO CARD (Survival - El Principal)
-            // Replicamos la tarjeta grande "Quick Play" de la foto
+            // HERO CARD (Survival - El Principal)
             SurvivalHeroCard(onClick = onPlaySurvival)
 
             Spacer(modifier = Modifier.height(32.dp))
 
-            // 3. SECCIÓN GRID
+            // SECCIÓN GRID
             Text(
-                text = "Select Mode",
+                text = "Seleccionar modo",
                 style = MaterialTheme.typography.titleMedium,
                 color = SteamTextPrimary,
                 fontWeight = FontWeight.Bold
@@ -108,7 +158,6 @@ fun MenuScreen(
 
 @Composable
 fun SurvivalHeroCard(onClick: () -> Unit) {
-    // Un fondo un poco más claro que el del app para destacar
     val cardBg = Color(0xFF1d1d27)
 
     Card(
@@ -120,29 +169,28 @@ fun SurvivalHeroCard(onClick: () -> Unit) {
         Column(
             modifier = Modifier.padding(20.dp)
         ) {
-            // Icono Circular y Badge (simulado)
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Box(
                     modifier = Modifier
                         .size(40.dp)
-                        .background(Color(0xFF1d154a), CircleShape), // Fondo violeta oscuro
+                        .background(Color(0xFF2C1A20), CircleShape),
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
                         imageVector = Icons.Default.Favorite, // Corazón para Survival
                         contentDescription = null,
-                        tint = Color(0xFF482bea), // Violeta brillante
+                        tint = Color(0xFFF43F5E),
                         modifier = Modifier.size(20.dp)
                     )
                 }
                 Spacer(modifier = Modifier.width(12.dp))
-                // Badge opcional tipo "POPULAR"
+
                 Surface(
                     color = Color(0xFF2E7D32).copy(alpha = 0.2f),
                     shape = RoundedCornerShape(8.dp)
                 ) {
                     Text(
-                        text = "3 LIVES",
+                        text = "3 VIDAS",
                         color = Color(0xFF4CAF50),
                         style = MaterialTheme.typography.labelSmall,
                         fontWeight = FontWeight.Bold,
@@ -161,7 +209,7 @@ fun SurvivalHeroCard(onClick: () -> Unit) {
                 fontWeight = FontWeight.Bold
             )
             Text(
-                text = "Test your knowledge with 3 lives. How far can you go?",
+                text = "Pon a prueba tus conocimientos con 3 vidas. ¿Hasta dónde puedes llegar?",
                 style = MaterialTheme.typography.bodyMedium,
                 color = SteamTextSecondary,
                 modifier = Modifier.padding(top = 4.dp)
@@ -178,8 +226,8 @@ fun SurvivalHeroCard(onClick: () -> Unit) {
                     .background(
                         brush = Brush.horizontalGradient(
                             colors = listOf(
-                                Color(0xFF554BF9), // Violeta Start
-                                Color(0xFF3B82F6)  // Azul End
+                                Color(0xFF554BF9),
+                                Color(0xFF3B82F6)
                             )
                         )
                     )
@@ -212,7 +260,7 @@ fun ModeGridCard(item: MenuModeItem) {
         colors = CardDefaults.cardColors(containerColor = Color(0xFF1d1d27)),
         modifier = Modifier
             .fillMaxWidth()
-            .aspectRatio(1.1f) // Cuadrado ligeramente rectangular
+            .aspectRatio(1.1f)
             .clickable { item.onClick() }
     ) {
         Column(
@@ -220,19 +268,28 @@ fun ModeGridCard(item: MenuModeItem) {
             verticalArrangement = Arrangement.Center,
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            // Icono con fondo circular de su color
             Box(
                 modifier = Modifier
                     .size(56.dp)
                     .background(item.color.copy(alpha = 0.15f), CircleShape),
                 contentAlignment = Alignment.Center
             ) {
-                Icon(
-                    imageVector = item.icon,
-                    contentDescription = null,
-                    tint = item.color,
-                    modifier = Modifier.size(28.dp)
-                )
+
+                if (item.icon != null) {
+                    Icon(
+                        imageVector = item.icon,
+                        contentDescription = null,
+                        tint = item.color,
+                        modifier = Modifier.size(28.dp)
+                    )
+                } else {
+                    Icon(
+                        painter = painterResource(item.drawable!!),
+                        contentDescription = null,
+                        tint = item.color,
+                        modifier = Modifier.size(28.dp)
+                    )
+                }
             }
 
             Spacer(modifier = Modifier.height(16.dp))
@@ -244,16 +301,16 @@ fun ModeGridCard(item: MenuModeItem) {
                 fontWeight = FontWeight.SemiBold
             )
 
-            Spacer(modifier = Modifier.height(4.dp)) // Espacio pequeño entre título y descripción
+            Spacer(modifier = Modifier.height(4.dp))
 
             Text(
                 text = item.description,
-                style = MaterialTheme.typography.bodySmall, // Letra pequeña (12sp aprox)
-                color = SteamTextSecondary, // Color gris secundario
-                textAlign = TextAlign.Center, // Centrado
-                maxLines = 2, // Limitamos a 2 líneas para que no rompa el diseño
-                lineHeight = 14.sp, // Altura de línea compacta
-                modifier = Modifier.padding(horizontal = 8.dp) // Margen para que no toque los bordes
+                style = MaterialTheme.typography.bodySmall,
+                color = SteamTextSecondary,
+                textAlign = TextAlign.Center,
+                maxLines = 2,
+                lineHeight = 14.sp,
+                modifier = Modifier.padding(horizontal = 8.dp)
             )
         }
     }

@@ -1,8 +1,8 @@
 package com.alexisgau.gamereviewchallenge.ui.navigation
 
 
+import com.alexisgau.gamereviewchallenge.domain.model.GameMode
 import kotlinx.serialization.Serializable
-import com.alexisgau.gamereviewchallenge.ui.startGame.GameMode
 
 
 // 1. Ruta del Menú Principal
@@ -18,5 +18,6 @@ data class GameRoute(val mode: GameMode)
 data class ScoreRoute(
     val score: Int,
     val correctAnswers: Int,
-    val isNewRecord: Boolean = false
+    val isNewRecord: Boolean = false,
+    val gameMode: GameMode
 )

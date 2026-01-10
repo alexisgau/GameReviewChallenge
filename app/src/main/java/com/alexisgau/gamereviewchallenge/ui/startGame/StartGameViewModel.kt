@@ -1,10 +1,15 @@
 package com.alexisgau.gamereviewchallenge.ui.startGame
 
+import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import androidx.navigation.toRoute
 import com.alexisgau.gamereviewchallenge.domain.model.Game
+import com.alexisgau.gamereviewchallenge.domain.model.GameMode
 import com.alexisgau.gamereviewchallenge.domain.model.Review
-import com.alexisgau.gamereviewchallenge.ui.startGame.GameEvent.*
+import com.alexisgau.gamereviewchallenge.domain.repository.GameRepository
+import com.alexisgau.gamereviewchallenge.domain.repository.ScoreRepository
+import com.alexisgau.gamereviewchallenge.ui.navigation.GameRoute
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -12,116 +17,134 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-import kotlinx.serialization.Serializable
 
-// Estado único de la pantalla (Best Practice: Single Source of Truth)
+
 data class GameUiState(
+    val isLoading: Boolean = true,
     val score: Int = 0,
     val correctAnswersCount: Int = 0,
     val gameMode: GameMode = GameMode.HARDCORE,
-    // --- NUEVO: Vidas actuales ---
     val currentLives: Int = 0,
-    // Para saber si mostramos corazones (en Free es infinito)
     val maxLives: Int = 0,
     val currentGame: Game? = null,
     val options: List<Game> = emptyList(),
     val selectedGameId: Long? = null,
     val isAnswerCorrect: Boolean? = null,
-    val isInputLocked: Boolean = false
+    val isInputLocked: Boolean = false,
+    val activeHint: GameHint? = null,
+    val hintCost: Int = 50,
+    val errorMessage: String? = null
 )
-@Serializable
-enum class GameMode {
-    HARDCORE, // Suma puntos, si erras pierdes
-    FREE,      // Infinito, no pierdes nunca
-    GENRE,    // Juego de un género específico
-    SURVIVAL,
-    BAD_REVIEWS,
-    GOOD_REVIEWS,
+
+sealed interface GameHint {
+    data class Genre(val text: String) : GameHint
+    data class ExtraReview(val review: Review) : GameHint
 }
 
 sealed interface GameEvent {
-    data class GameOver(val finalScore: Int, val correctAnswersCount: Int) : GameEvent
+    data class GameOver(val finalScore: Int, val isNewRecord: Boolean, val correctAnswersCount: Int) : GameEvent
 }
 
-class StartGameViewModel : ViewModel() {
+class StartGameViewModel(
+    savedStateHandle: SavedStateHandle,
+    private val gameRepository: GameRepository,
+    private val scoreRepository: ScoreRepository
+) : ViewModel() {
 
     private val _uiState = MutableStateFlow(GameUiState())
     val uiState = _uiState.asStateFlow()
 
     private val _gameEvents = Channel<GameEvent>()
     val gameEvents = _gameEvents.receiveAsFlow()
-    private var cachedNextGame: Game? = null
 
-    // Datos Mockeados (Idealmente esto vendría de un Repository)
+    // Almacén de juegos cargados
+    private val availableGames = mutableListOf<Game>()
+    private val distractorPool = mutableListOf<Game>()
+    private val playedGameIds = mutableSetOf<Long>()
 
-    val allReviews = listOf(Review("ESTE JUEGO ME PARECIO UNA BORONGUITA", false), Review("TA BUENO", true), Review("Me gusta", true))
-    private val allGames = listOf(
-        // ... (Tu lista completa de juegos aquí) ...
-        Game(1L, "Hades", "Roguelike", "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcTaOBiMrkNUGrpFUw5SSrEV7Un8Ur0hurSmBg&s", allReviews),
-        Game(2L, "Stardew Valley", "Simulation", "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcTaOBiMrkNUGrpFUw5SSrEV7Un8Ur0hurSmBg&s", allReviews),
-        Game(3L, "Terraria", "Sandbox", "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcTaOBiMrkNUGrpFUw5SSrEV7Un8Ur0hurSmBg&s", allReviews),
-        Game(4L, "Hollow Knight", "Metroidvania", "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcTaOBiMrkNUGrpFUw5SSrEV7Un8Ur0hurSmBg&sg", allReviews),
-        Game(5L, "Elden Ring", "RPG", "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcTaOBiMrkNUGrpFUw5SSrEV7Un8Ur0hurSmBg&s", allReviews),
-        Game(6L, "Cyberpunk 2077", "RPG", "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcTaOBiMrkNUGrpFUw5SSrEV7Un8Ur0hurSmBg&s", allReviews),
-        Game(7L, "The Witcher 3", "RPG", "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcTaOBiMrkNUGrpFUw5SSrEV7Un8Ur0hurSmBg&s", allReviews),
-        Game(8L, "Baldur's Gate 3", "RPG", "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcTaOBiMrkNUGrpFUw5SSrEV7Un8Ur0hurSmBg&s", allReviews),
-        Game(9L, "Portal 2", "Puzzle", "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcTaOBiMrkNUGrpFUw5SSrEV7Un8Ur0hurSmBg&s", allReviews),
-        Game(10L, "Minecraft", "Survival", "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcTaOBiMrkNUGrpFUw5SSrEV7Un8Ur0hurSmBg&s", allReviews)
-    )
+    private var currentHighScoreForMode: Int = 0
 
     init {
-        startGame()
+        // Obtenemos el modo desde los argumentos de navegación
+        val route = savedStateHandle.toRoute<GameRoute>()
+        val mode = route.mode
+
+
+        viewModelScope.launch {
+            scoreRepository.observeHighScore(mode).collect { highScore ->
+                currentHighScoreForMode = highScore
+            }
+        }
+
+
+        initializeGame(mode)
     }
 
-    fun setGameMode(mode: GameMode) {
-        // Configuramos vidas iniciales
-        val initialLives = when (mode) {
-            GameMode.SURVIVAL -> 3
-            GameMode.HARDCORE -> 1
-            GameMode.FREE -> -1 // -1 significa Infinito
-            // Hardcore y los demás modos de "filtro" suelen ser muerte súbita (1 vida)
-            // Si quieres que GENRE tenga 3 vidas, ponlo arriba con SURVIVAL
-            else -> 1
-        }
+    private fun initializeGame(mode: GameMode) {
+        val initialLives = getInitialLivesForMode(mode)
 
         _uiState.update {
             it.copy(
                 gameMode = mode,
-                score = 0,
-                correctAnswersCount = 0,
                 currentLives = initialLives,
-                maxLives = initialLives
+                maxLives = initialLives,
+                isLoading = true,
+                errorMessage = null
             )
         }
 
-        // AQUÍ ES DONDE ESCALARÁS LOS DATOS (GENRE, BAD_REVIEWS):
-        // reloadGamesData(mode) <--- Función futura para filtrar la lista 'allGames'
-    }
-
-    private fun startGame() {
         viewModelScope.launch {
-            val firstGame = allGames.random()
-            loadLevel(firstGame)
-            prefetchNextGame()
+            loadGameBatch()
         }
     }
 
-    private fun loadLevel(game: Game) {
-        // Generamos distractores
-        val distractors = allGames.filter { it.id != game.id }
-            .shuffled()
-            .take(2)
+    private fun getInitialLivesForMode(mode: GameMode): Int {
+        return when (mode) {
+            GameMode.SURVIVAL, GameMode.BAD_REVIEWS, GameMode.GOOD_REVIEWS -> 3
+            GameMode.HARDCORE -> 1
+            GameMode.FREE -> -1 // Infinitas
+            else -> 1
+        }
+    }
 
-        val options = (distractors + game).shuffled()
+    private fun startGameRound() {
+        if (availableGames.isEmpty()) {
+            // Si nos quedamos sin juegos, pedimos más y mostramos carga
+            _uiState.update { it.copy(isLoading = true) }
+            viewModelScope.launch { loadGameBatch() }
+            return
+        }
 
-        // Actualizamos estado y desbloqueamos input
+        // Prefetch: Si quedan pocos juegos, cargamos el siguiente lote en segundo plano
+        if (availableGames.size < 5) {
+            viewModelScope.launch { loadGameBatch() }
+        }
+
+        // Seleccionamos el juego correcto
+        val correctGame = availableGames.removeAt(0)
+
+        // Generamos distractores válidos (que no sean el juego correcto)
+        val validDistractors = distractorPool.filter { it.id != correctGame.id }
+
+        if (validDistractors.size < 2) {
+            // Caso borde: No hay suficientes distractores. Recargamos.
+            viewModelScope.launch { loadGameBatch() }
+            return
+        }
+
+        // Elegimos 2 distractores al azar
+        val distractors = validDistractors.shuffled().take(2)
+        val options = (distractors + correctGame).shuffled()
+
         _uiState.update {
             it.copy(
-                currentGame = game,
+                currentGame = correctGame,
                 options = options,
                 selectedGameId = null,
                 isAnswerCorrect = null,
-                isInputLocked = false
+                isInputLocked = false,
+                activeHint = null,
+                isLoading = false
             )
         }
     }
@@ -133,74 +156,151 @@ class StartGameViewModel : ViewModel() {
         val isCorrect = selectedId == currentState.currentGame?.id
 
         _uiState.update {
-            it.copy(selectedGameId = selectedId, isAnswerCorrect = isCorrect, isInputLocked = true)
+            it.copy(
+                selectedGameId = selectedId,
+                isAnswerCorrect = isCorrect,
+                isInputLocked = true
+            )
         }
 
         viewModelScope.launch {
+            // Pequeña pausa para que el usuario vea si acertó o falló
             delay(1500)
 
             if (isCorrect) {
-                // --- ACIERTO ---
-                // Sumamos puntos en todos los modos menos FREE (opcional)
-                val points = if (currentState.gameMode == GameMode.FREE) 0 else 100
-
-                _uiState.update {
-                    it.copy(
-                        score = it.score + points,
-                        correctAnswersCount = it.correctAnswersCount + 1
-                    )
-                }
-                goToNextLevel()
-
+                handleCorrectAnswer()
             } else {
-                // --- ERROR ---
-
-                // Caso FREE: No importa nada, seguimos
-                if (currentState.gameMode == GameMode.FREE) {
-                    goToNextLevel()
-                    return@launch
-                }
-
-                // Caso SURVIVAL / HARDCORE / OTROS: Restamos vida
-                val newLives = currentState.currentLives - 1
-
-                _uiState.update { it.copy(currentLives = newLives) }
-
-                if (newLives <= 0) {
-                    // GAME OVER
-                    _gameEvents.send(
-                        GameEvent.GameOver(
-                            finalScore = currentState.score,
-                            correctAnswersCount = currentState.correctAnswersCount
-                        )
-                    )
-                } else {
-                    // Aún le quedan vidas (Survival), seguimos jugando
-                    goToNextLevel()
-                }
+                handleWrongAnswer()
             }
         }
     }
 
-    private fun goToNextLevel() {
-        val nextGame = cachedNextGame ?: allGames.random()
-        loadLevel(nextGame)
+    private fun handleCorrectAnswer() {
+        val currentState = _uiState.value
+        // En modo FREE no damos puntos
+        val points = if (currentState.gameMode == GameMode.FREE) 0 else 125
 
-        // Lanzamos prefetch del subsiguiente
-        viewModelScope.launch { prefetchNextGame() }
+        _uiState.update {
+            it.copy(
+                score = it.score + points,
+                correctAnswersCount = it.correctAnswersCount + 1
+            )
+        }
+        startGameRound()
     }
 
-    private suspend fun prefetchNextGame() {
-        cachedNextGame = allGames.random()
+    private suspend fun handleWrongAnswer() {
+        val currentState = _uiState.value
+
+        if (currentState.gameMode == GameMode.FREE) {
+            // En modo libre no se pierden vidas
+            startGameRound()
+            return
+        }
+
+        val newLives = currentState.currentLives - 1
+        _uiState.update { it.copy(currentLives = newLives) }
+
+        if (newLives <= 0) {
+            val finalScore = currentState.score
+            val isRecord = finalScore > currentHighScoreForMode
+
+            if (isRecord) {
+                scoreRepository.saveScoreIfBest(currentState.gameMode, finalScore)
+            }
+
+
+            // Game Over
+            _gameEvents.send(
+                GameEvent.GameOver(
+                    finalScore = currentState.score,
+                    isNewRecord = isRecord,
+                    correctAnswersCount = currentState.correctAnswersCount
+                )
+            )
+        } else {
+            // Sigue jugando
+            startGameRound()
+        }
     }
 
-//    fun checkHighScore(currentScore: Int) {
-//        viewModelScope.launch {
-//            val oldRecord = repository.getHighScore() // Viene del Back/DataStore
-//            if (currentScore > oldRecord) {
-//                repository.saveNewHighScore(currentScore) // Guardar en Back
-//                // Avisar a la UI que muestre el badge
-//            }
-//        }
-//    }
+    fun onRequestHint() {
+        val currentState = _uiState.value
+
+        // Solo permitido en Survival (puedes cambiar esta regla si quieres)
+        if (currentState.gameMode != GameMode.SURVIVAL) return
+
+        // Validaciones
+        if (currentState.score < currentState.hintCost) return
+        if (currentState.activeHint != null || currentState.isInputLocked) return
+
+        val newScore = currentState.score - currentState.hintCost
+        val game = currentState.currentGame ?: return
+
+        // Lógica simple para elegir pista: 50% Género, 50% Reseña extra
+        // (Asegurarse de que haya reseñas disponibles si elige esa opción)
+        val showGenre = Math.random() < 0.5
+
+        val hint: GameHint = if (showGenre && game.genres.isNotEmpty()) {
+            GameHint.Genre(game.genres.joinToString(", "))
+        } else if (game.reviews.isNotEmpty()) {
+            val extraReview = game.reviews.random()
+            GameHint.ExtraReview(extraReview)
+        } else {
+            // Fallback si no hay info (raro, pero posible)
+            GameHint.Genre("Mystery Game")
+        }
+
+        _uiState.update {
+            it.copy(score = newScore, activeHint = hint)
+        }
+    }
+
+    fun onRetryLoad() {
+        _uiState.update { it.copy(isLoading = true, errorMessage = null) }
+        viewModelScope.launch { loadGameBatch() }
+    }
+
+    private suspend fun loadGameBatch() {
+        val currentMode = _uiState.value.gameMode
+        val excludedList = playedGameIds.toList()
+
+        val result = gameRepository.getNextBatch(
+            amount = 20,
+            mode = currentMode,
+            excludedIds = excludedList
+        )
+
+        result.onSuccess { newGames ->
+            if (newGames.isEmpty()) {
+                // Si el backend devuelve lista vacía (se acabaron los juegos o error silencioso)
+                _uiState.update { it.copy(errorMessage = "No more games available.") }
+                return@onSuccess
+            }
+
+            // Agregamos juegos a la cola
+            availableGames.addAll(newGames)
+
+            // Registramos IDs para no repetir
+            playedGameIds.addAll(newGames.map { it.id })
+
+            // Llenamos el pool de distractores
+            distractorPool.addAll(newGames)
+
+            // Si estábamos esperando juegos para empezar la ronda...
+            if (_uiState.value.currentGame == null) {
+                startGameRound()
+            }
+        }.onFailure { error ->
+            // Manejo de error en UI
+            _uiState.update {
+                it.copy(
+                    isLoading = false,
+                    errorMessage = "Failed to load games. Check your connection."
+                )
+            }
+            error.printStackTrace()
+        }
+    }
 }
+
