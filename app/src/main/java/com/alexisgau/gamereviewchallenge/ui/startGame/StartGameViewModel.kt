@@ -42,7 +42,11 @@ sealed interface GameHint {
 }
 
 sealed interface GameEvent {
-    data class GameOver(val finalScore: Int, val isNewRecord: Boolean, val correctAnswersCount: Int) : GameEvent
+    data class GameOver(
+        val finalScore: Int,
+        val isNewRecord: Boolean,
+        val correctAnswersCount: Int
+    ) : GameEvent
 }
 
 class StartGameViewModel(
@@ -265,6 +269,8 @@ class StartGameViewModel(
         val currentMode = _uiState.value.gameMode
         val excludedList = playedGameIds.toList()
 
+        // El ViewModel sigue llamando a la misma función del repositorio.
+        // La diferencia es que ahora el repositorio responde desde memoria.
         val result = gameRepository.getNextBatch(
             amount = 20,
             mode = currentMode,
@@ -273,33 +279,39 @@ class StartGameViewModel(
 
         result.onSuccess { newGames ->
             if (newGames.isEmpty()) {
-                // Si el backend devuelve lista vacía (se acabaron los juegos o error silencioso)
-                _uiState.update { it.copy(errorMessage = "No more games available.") }
+                // Si ya no hay juegos nuevos (todos están en playedGameIds)
+                // En local, podemos optar por resetear la lista y seguir jugando
+                if (playedGameIds.isNotEmpty()) {
+                    playedGameIds.clear()
+                    loadGameBatch() // Reintentar con lista limpia
+                } else {
+                    _uiState.update { it.copy(errorMessage = "No games found in the database.") }
+                }
                 return@onSuccess
             }
 
-            // Agregamos juegos a la cola
+            // Actualizamos nuestras listas locales del ViewModel
             availableGames.addAll(newGames)
-
-            // Registramos IDs para no repetir
             playedGameIds.addAll(newGames.map { it.id })
 
-            // Llenamos el pool de distractores
+            // Llenamos el pool de distractores.
+            // Tip: Con el JSON local, podrías llenar esto con todos los juegos
+            // para que los distractores sean más variados.
             distractorPool.addAll(newGames)
 
-            // Si estábamos esperando juegos para empezar la ronda...
             if (_uiState.value.currentGame == null) {
                 startGameRound()
             }
+
+            _uiState.update { it.copy(isLoading = false) }
+
         }.onFailure { error ->
-            // Manejo de error en UI
             _uiState.update {
                 it.copy(
                     isLoading = false,
-                    errorMessage = "Failed to load games. Check your connection."
+                    errorMessage = "Error loading game data. Please check your connection."
                 )
             }
-            error.printStackTrace()
         }
     }
 }

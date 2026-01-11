@@ -25,30 +25,37 @@ import org.koin.androidx.viewmodel.dsl.viewModel
 
 val appModule = module {
 
-
     single {
-        HttpClient(OkHttp) {
-
-            install(ContentNegotiation) {
-                json(Json {
-                    ignoreUnknownKeys = true
-                    prettyPrint = true
-                    isLenient = true
-                })
-            }
-
-            defaultRequest {
-                url("http://10.0.2.2:8080/")
-                header(HttpHeaders.ContentType, ContentType.Application.Json)
-                header("X-API-KEY", BuildConfig.API_KEY)
-            }
+        Json {
+            ignoreUnknownKeys = true
+            isLenient = true
+            coerceInputValues = true
+            encodeDefaults = true
         }
     }
 
+    // 2. CLIENTE HTTP (AQUÍ ESTÁ EL CAMBIO)
+    single {
+        HttpClient(OkHttp) {
+            install(ContentNegotiation) {
+                val jsonInstance = get<Json>()
+
+                json(jsonInstance, contentType = ContentType.Application.Json)
+
+                json(jsonInstance, contentType = ContentType.Text.Plain)
+            }
+        }
+    }
     single<GameRemoteDataSource> { KtorGameRemoteDataSource(get()) }
     single { ScoreStorage(androidContext()) }
 
-    single<GameRepository> { GameRepositoryImpl(get()) }
+    single<GameRepository> {
+        GameRepositoryImpl(
+            context = androidContext(), // Inyecta el contexto de la App
+            remoteDataSource = get(),   // Inyecta el DataSource
+            json = get()                // Inyecta el Json definido arriba
+        )
+    }
     single<ScoreRepository> { ScoreRepositoryImpl(get()) }
 
 

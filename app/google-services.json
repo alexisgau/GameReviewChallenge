@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "140078796500",
+    "project_id": "game-review-challenge",
+    "storage_bucket": "game-review-challenge.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:140078796500:android:82e92c68745fbbf21d7541",
+        "android_client_info": {
+          "package_name": "com.alexisgau.gamereviewchallenge"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyD-QYqpU5aarsZ-nKd5Qi4guiGskRDl4Kk"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

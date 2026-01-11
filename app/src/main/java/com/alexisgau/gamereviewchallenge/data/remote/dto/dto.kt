@@ -5,7 +5,7 @@ import kotlinx.serialization.Serializable
 
 @Serializable
 data class GameDto(
-    @SerialName("id") val id: Long,
+    @SerialName("id") val id: Long? = null,
 
     @SerialName("name") val name: String,
 

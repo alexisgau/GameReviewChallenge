@@ -8,10 +8,10 @@
             <InsightsFilterSettings>
               <option name="connection">
                 <ConnectionSetting>
-                  <option name="appId" value="PLACEHOLDER" />
-                  <option name="mobileSdkAppId" value="" />
-                  <option name="projectId" value="" />
-                  <option name="projectNumber" value="" />
+                  <option name="appId" value="com.alexisgau.gamereviewchallenge" />
+                  <option name="mobileSdkAppId" value="1:140078796500:android:82e92c68745fbbf21d7541" />
+                  <option name="projectId" value="game-review-challenge" />
+                  <option name="projectNumber" value="140078796500" />
                 </ConnectionSetting>
               </option>
               <option name="signal" value="SIGNAL_UNSPECIFIED" />
